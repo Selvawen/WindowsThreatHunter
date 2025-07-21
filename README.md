@@ -41,7 +41,7 @@ Each entry includes the type of threat, process or service name, file path, and 
 
 ## Recommendations
 
-- Pay special attention to:
+Pay special attention to:
 - Files in user directories (e.g., `C:\Users\`, `%TEMP%`, `%APPDATA%`)
 - Unsigned executables
 - Unknown or suspicious startup entries and services
