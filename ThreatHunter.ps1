@@ -1,5 +1,5 @@
 # ThreatHunter.ps1
-# Author: Ben
+# Author: Selvawen
 # Purpose: Live Windows Threat Hunting Script (Refined)
 
 $ErrorActionPreference = "SilentlyContinue"
@@ -86,7 +86,7 @@ function Export-Report {
 }
 
 # === MAIN EXECUTION ===
-Write-Host "`n===[ ThreatHunter by Ben - v2.0 ]===" -ForegroundColor Yellow
+Write-Host "`n===[ ThreatHunter by Selvawen - v2.0 ]===" -ForegroundColor Yellow
 
 Get-SuspiciousProcesses
 Get-StartupEntries
