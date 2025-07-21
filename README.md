@@ -1,5 +1,4 @@
 ﻿# WindowsThreatHunter
-**Author:** Ben  
 **Purpose:** Live Windows Threat Hunting Script for Blue Team Operations
 
 ## Overview
