@@ -1,18 +1,48 @@
-# ThreatHunter.ps1
-# Author: Selvawen
-# Purpose: Live Windows Threat Hunting Script (Refined)
+<#
+.THREATHUNTER.PS1
+Author: Selvawen
+Purpose: Live Windows Threat Hunting Script for Blue Team Operations
+
+#>
+
+param(
+    [switch]$ScanProcesses,
+    [switch]$ScanStartup,
+    [switch]$ScanServices,
+    [switch]$ExportCSV = $true
+)
 
 $ErrorActionPreference = "SilentlyContinue"
 $report = @()
+$logFile = "$PSScriptRoot\ThreatHunter.log"
 
-function Add-ReportEntry($type, $name, $path, $extra1 = "", $extra2 = "") {
+function Log($msg) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    "$timestamp $msg" | Out-File -Append -FilePath $logFile
+}
+
+function Get-FileHashSafe($path) {
+    try {
+        if (Test-Path $path) {
+            return (Get-FileHash -Path $path -Algorithm SHA256).Hash
+        }
+    } catch {
+        return "ErrorHashing"
+    }
+    return "N/A"
+}
+
+function Add-ReportEntry($type, $name, $path, $extra1 = "", $extra2 = "", $mitre = "") {
+    $hash = Get-FileHashSafe $path
     $report += [PSCustomObject]@{
         Time       = Get-Date
         Type       = $type
         Name       = $name
         Path       = $path
+        Hash       = $hash
         Extra1     = $extra1
         Extra2     = $extra2
+        MITRE      = $mitre
     }
 }
 
@@ -23,6 +53,7 @@ function Is-SuspiciousExecutable($path) {
 }
 
 function Get-SuspiciousProcesses {
+    Log "Scanning running processes..."
     Write-Host "`n=== [PROCESS SCAN] ===" -ForegroundColor Cyan
     $userDirs = @("C:\Users\", "$env:TEMP", "$env:APPDATA")
     Get-Process | ForEach-Object {
@@ -30,68 +61,58 @@ function Get-SuspiciousProcesses {
             $exe = $_.Path
             if ($exe -and ($userDirs | Where-Object { $exe -like "$_*" }) -and (Is-SuspiciousExecutable $exe)) {
                 $sig = Get-AuthenticodeSignature $exe
-                Add-ReportEntry "Process" $_.Name $exe $_.Id $sig.Status
+                Add-ReportEntry "Process" $_.Name $exe $_.Id $sig.Status "T1059"
             }
         } catch {}
     }
 }
 
 function Get-StartupEntries {
+    Log "Scanning startup entries..."
     Write-Host "`n=== [STARTUP ENTRY SCAN] ===" -ForegroundColor Cyan
-    $paths = @(
+    $keys = @(
         "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run",
         "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
     )
-    foreach ($path in $paths) {
-        if (Test-Path $path) {
-            Get-ItemProperty $path | ForEach-Object {
-                $_.PSObject.Properties | Where-Object { $_.Name -notlike "PS*" } | ForEach-Object {
-                    $exe = $_.Value
-                    if ($exe -and $exe -is [string] -and (Is-SuspiciousExecutable $exe)) {
-                        $sig = Get-AuthenticodeSignature $exe
-                        Add-ReportEntry "Startup" $_.Name $exe "UserFolder: $($exe -like 'C:\Users\*')" $sig.Status
-                    }
+    foreach ($key in $keys) {
+        Get-ItemProperty -Path $key | ForEach-Object {
+            $_.PSObject.Properties | ForEach-Object {
+                $name = $_.Name
+                $path = $_.Value
+                if ($path -and (Is-SuspiciousExecutable $path)) {
+                    $sig = Get-AuthenticodeSignature $path
+                    Add-ReportEntry "Startup" $name $path "" $sig.Status "T1547"
                 }
             }
         }
     }
 }
 
-function Get-ScheduledTasks {
-    Write-Host "`n=== [SCHEDULED TASK SCAN] ===" -ForegroundColor Cyan
-    Get-ScheduledTask | Where-Object { $_.TaskPath -notlike "\Microsoft\*" } | ForEach-Object {
-        try {
-            Add-ReportEntry "ScheduledTask" $_.TaskName $_.TaskPath $_.Principal.UserId $_.State
-        } catch {}
+function Get-SuspiciousServices {
+    Log "Scanning services..."
+    Write-Host "`n=== [SERVICE SCAN] ===" -ForegroundColor Cyan
+    Get-WmiObject Win32_Service | ForEach-Object {
+        $path = $_.PathName -replace '"',''
+        if ($path -and (Is-SuspiciousExecutable $path)) {
+            $sig = Get-AuthenticodeSignature $path
+            Add-ReportEntry "Service" $_.Name $path $_.StartMode $sig.Status "T1569"
+        }
     }
 }
 
-function Export-Report {
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $folderPath = "C:\Users\YourUsername\Documents\ThreatHunter\Reports"
+# Run scans based on flags
+if ($ScanProcesses) { Get-SuspiciousProcesses }
+if ($ScanStartup)   { Get-StartupEntries }
+if ($ScanServices)  { Get-SuspiciousServices }
 
-    if (!(Test-Path $folderPath)) {
-        New-Item -Path $folderPath -ItemType Directory -Force | Out-Null
-        Write-Host "[*] Created folder: $folderPath" -ForegroundColor DarkYellow
-    }
-
-    $outfile = "$folderPath\ThreatHunter-Report-$timestamp.csv"
-
-    if ($report.Count -eq 0) {
-        Write-Host "`n[!] No suspicious items found. No report will be saved." -ForegroundColor Yellow
-    } else {
-        $report | Export-Csv -Path $outfile -NoTypeInformation
-        Write-Host "`n[*] Report saved to: $outfile" -ForegroundColor Green
-    }
+# Export report
+if ($ExportCSV -and $report.Count -gt 0) {
+    $outFile = "$PSScriptRoot\ThreatHunter_Report_20250721_025437.csv"
+    $report | Export-Csv -Path $outFile -NoTypeInformation
+    Log "Report saved to $outFile"
+    Write-Host "`n[+] Report saved to $outFile" -ForegroundColor Green
+} elseif ($ExportCSV) {
+    Write-Host "`n[-] No suspicious activity found." -ForegroundColor Yellow
+    Log "No suspicious items to report."
 }
 
-# === MAIN EXECUTION ===
-Write-Host "`n===[ ThreatHunter by Selvawen - v2.0 ]===" -ForegroundColor Yellow
-
-Get-SuspiciousProcesses
-Get-StartupEntries
-Get-ScheduledTasks
-
-Write-Host "`n[*] Total suspicious items found: $($report.Count)" -ForegroundColor Cyan
-Export-Report
-Write-Host "`n[*] Script execution complete.`n" -ForegroundColor Gray
