@@ -58,17 +58,6 @@ Pay special attention to:
 - Admin rights are needed for complete visibility into all processes and services.
 - Currently optimized for English-language Windows systems.
 
-## Contribution
-
-Contributions are welcome! Feel free to fork the project and submit a pull request for:
-
-- Additional checks (e.g., network connections, scheduled tasks)
-- Enhanced report formatting (e.g., HTML, JSON)
-- Performance improvements
-- Compatibility updates for future Windows versions
-
-Please include meaningful commit messages and follow PowerShell scripting best practices.
-
 ## License
 
 MIT License
