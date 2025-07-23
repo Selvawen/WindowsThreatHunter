@@ -1,4 +1,4 @@
-﻿# WindowsThreatHunter
+﻿# Windows Threat Hunter
 **Purpose:** Live Windows Threat Hunting Script for Blue Team Operations
 
 ## Overview
